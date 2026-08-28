@@ -54,6 +54,7 @@ git remote add upstream https://github.com/anomalyco/opencode.git
 Make sure these files are on the branch you intend to deploy:
 
 - `deploy/coolify/Dockerfile` — the build
+- `deploy/coolify/docker-entrypoint.sh` — starts the server, or forwards to the CLI
 - `docker-compose.coolify.yaml` — optional, for the Compose build pack
 - `deploy/coolify/.env.example` — the variables you'll paste into Coolify
 
@@ -179,6 +180,18 @@ code. **Storages → + Add** two volume mounts:
 The healthcheck polls `/site.webmanifest`, which is one of the few paths that
 deliberately bypasses auth — so a healthy container is a real signal even with
 the password set.
+
+---
+
+### Running one-off CLI commands
+
+The entrypoint forwards any arguments to the CLI, so the same image doubles as
+the CLI on that server:
+
+```bash
+docker exec -it <container> opencode --version
+docker exec -it <container> opencode run "summarize the failing test"
+```
 
 ---
 
