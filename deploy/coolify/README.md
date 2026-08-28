@@ -99,6 +99,11 @@ Simplest. Coolify handles the domain, TLS and volumes from its own UI.
 | Dockerfile Location | `/deploy/coolify/Dockerfile` |
 | Ports Exposes | `4096` |
 
+Keep those two fields straight: **Base Directory** stays `/` because it is the
+build context, and the Dockerfile needs the repo root to `COPY . .` from. Putting
+the Dockerfile path there instead fails the deploy before the build starts, with
+`mkdir: can't create directory '.../deploy/coolify/Dockerfile': File exists`.
+
 ### Option B — Docker Compose build pack
 
 Keeps volumes and the healthcheck declared in the repo.
@@ -327,6 +332,20 @@ not enough.
 The UI doesn't have the credentials in JavaScript. Reload once with
 `?auth_token=$(printf 'opencode:YOUR_PASSWORD' | base64 -w0)`, or set the
 username/password in the UI's server connection dialog.
+
+**Deploy fails at `mkdir`: `can't create directory '.../deploy/coolify/Dockerfile': File exists`.**
+The Dockerfile path was put in **Base Directory** instead of **Dockerfile
+Location**. Coolify `mkdir -p`s the base directory before building, so it tries
+to create your Dockerfile as a folder and collides with the file the clone just
+wrote. Base Directory is the build *context* and must be `/` — the Dockerfile
+does `COPY . .` from the repo root — while the path to the file itself goes in
+Dockerfile Location.
+
+**The UI loads and the model picker is empty.**
+No provider is configured. Set a vendor key (`ANTHROPIC_API_KEY` and friends) or
+`OPENCODE_CONFIG_CONTENT` for your own gateway. The server starts and serves the
+UI happily with no provider at all — it just has no models to offer, so nothing
+agentic works until you add one.
 
 **Container is healthy but the domain 502s.**
 Coolify needs to know the port. Set **Ports Exposes** to `4096`
