@@ -1,0 +1,7 @@
+FROM debian:trixie-slim
+RUN apt-get update && apt-get install -y curl unzip git ca-certificates \
+    && curl -fsSL https://opencode.ai/install | bash \
+    && mv /root/.opencode/bin/opencode /usr/local/bin/opencode
+WORKDIR /workspace
+EXPOSE 4096
+CMD ["opencode", "web", "--hostname", "0.0.0.0", "--port", "4096"]
