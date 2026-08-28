@@ -14,14 +14,27 @@ ARG BUN_VERSION=1.3.14
 # ---------------------------------------------------------------- build stage
 FROM oven/bun:${BUN_VERSION}-debian AS build
 
-# node-gyp is invoked by native postinstall scripts (node-pty, tree-sitter) and
-# needs Node >= 22 plus a toolchain; python3-setuptools covers distutils.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
        build-essential ca-certificates curl git python3 python3-setuptools unzip xz-utils \
-  && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
-  && apt-get install -y --no-install-recommends nodejs \
   && rm -rf /var/lib/apt/lists/*
+
+# node-gyp runs during the native postinstall scripts (node-pty, tree-sitter) and
+# node-gyp 13 needs Node >= 22 -- on Node 20 it dies with
+# "webidl.util.markAsUncloneable is not a function". Debian ships Node 20 and
+# apt happily installs it, so take the tarball from nodejs.org instead of
+# trusting a repository to hand us the right major.
+ARG NODE_VERSION=24.20.0
+RUN set -eux; \
+  case "$(dpkg --print-architecture)" in \
+    amd64) nodearch=x64 ;; \
+    arm64) nodearch=arm64 ;; \
+    *) echo "unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+  esac; \
+  curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${nodearch}.tar.xz" -o /tmp/node.tar.xz; \
+  tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --exclude=CHANGELOG.md --exclude=LICENSE --exclude=README.md; \
+  rm /tmp/node.tar.xz; \
+  test "$(node --version)" = "v${NODE_VERSION}"
 
 WORKDIR /src
 
@@ -77,5 +90,7 @@ EXPOSE 4096
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -fsS "http://127.0.0.1:${OPENCODE_PORT}/site.webmanifest" > /dev/null || exit 1
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["sh", "-c", "exec opencode serve --hostname \"$OPENCODE_HOSTNAME\" --port \"$OPENCODE_PORT\" ${OPENCODE_CORS_ORIGIN:+--cors \"$OPENCODE_CORS_ORIGIN\"}"]
+# No CMD: the entrypoint starts the server when given no arguments, and forwards
+# any arguments to the CLI, so `docker run <image> --version` still works.
+COPY deploy/coolify/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]

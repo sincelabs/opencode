@@ -227,9 +227,11 @@ The embedded bundle wasn't found and the server fell back to proxying
 binary` — if that line is missing, the build didn't run `script/build.ts`.
 
 **Build fails in `bun install` on a native module.**
-Usually node-gyp. The build stage installs Node 24, `build-essential` and
-`python3-setuptools` for exactly this; if you changed the base image, put them
-back.
+Usually node-gyp, and usually the Node major. node-gyp 13 needs Node >= 22 — on
+Node 20 it dies with `webidl.util.markAsUncloneable is not a function`. Debian
+ships Node 20 and apt will happily install it, so the build stage pulls a pinned
+Node 24 tarball from nodejs.org rather than trusting a repository. If you changed
+that step, or dropped `build-essential` / `python3-setuptools`, put them back.
 
 **Build gets OOM-killed.**
 Add swap on the build machine or use a dedicated Coolify build server. 2 GB is
