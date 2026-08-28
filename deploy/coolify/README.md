@@ -130,13 +130,83 @@ With Option B, Coolify creates the volumes and reads
 | --- | --- | --- |
 | `OPENCODE_SERVER_PASSWORD` | **yes** | `openssl rand -base64 24`. Empty = no auth at all. |
 | `OPENCODE_SERVER_USERNAME` | no | Defaults to `opencode`. |
-| `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, …) | at least one | Any env name models.dev lists for that provider is picked up automatically. |
+| `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, …) | one, unless using a custom provider | Any env name models.dev lists for that provider is picked up automatically. |
+| `OPENCODE_CONFIG_CONTENT` | for a custom provider | A whole `opencode.json` as a string. See [Using your own OpenAI-compatible provider](#using-your-own-openai-compatible-provider). |
 | `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | recommended | Identity for commits the agent makes. |
 | `OPENCODE_CORS_ORIGIN` | no | Only if you call the API from a *different* domain. Same-origin is already allowed. |
 
 You do **not** need to configure CORS for normal use: the server allows any
 request whose `Origin` matches the `Host` it was served on, and Coolify's proxy
 passes the real host through.
+
+---
+
+### Using your own OpenAI-compatible provider
+
+If your models come from your own gateway rather than a public provider, declare
+it in config instead of setting a vendor API key. `@ai-sdk/openai-compatible` is
+statically imported by opencode's provider plugin, so it is already compiled into
+the binary — nothing is fetched from npm at runtime, and this works on a server
+with no outbound access to a package registry.
+
+Put the whole config in `OPENCODE_CONFIG_CONTENT` as a single-line string, and
+keep the key itself in a separate variable so the config stays readable and the
+secret stays a secret:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "mycorp": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "MyCorp Gateway",
+      "options": {
+        "baseURL": "https://llm.internal.example.com/v1",
+        "apiKey": "{env:MYCORP_API_KEY}"
+      },
+      "models": {
+        "mycorp-large": {
+          "name": "MyCorp Large",
+          "tool_call": true,
+          "limit": { "context": 128000, "output": 8192 }
+        }
+      }
+    }
+  },
+  "model": "mycorp/mycorp-large"
+}
+```
+
+Then set two Coolify variables: `OPENCODE_CONFIG_CONTENT` to that JSON, and
+`MYCORP_API_KEY` to the key. `{env:...}` is resolved by opencode when it reads
+the config, so the key never appears in the config value itself.
+
+What each part does:
+
+| Field | Meaning |
+| --- | --- |
+| `npm` | The AI SDK package. `@ai-sdk/openai-compatible` for any OpenAI-shaped API. |
+| `options.baseURL` | Your endpoint, including the version prefix. opencode appends `/chat/completions`. |
+| `options.apiKey` | Sent as `Authorization: Bearer <key>`. |
+| `models` | Your model IDs. The key is what gets sent as `model` in the request body. |
+| `model` | The default `provider/model` for new sessions. |
+
+`tool_call: true` matters — opencode is an agent, and a model advertised without
+tool support won't be offered for agentic work. Set `limit.context` and
+`limit.output` to your gateway's real numbers so context management behaves.
+
+To sanity-check it before wiring up the domain:
+
+```bash
+docker exec -it <container> opencode models | grep mycorp
+```
+
+The provider also has to appear in the server's own view, which is what the web
+UI reads:
+
+```bash
+curl -u opencode:$OPENCODE_SERVER_PASSWORD https://opencode.example.com/provider
+```
 
 ---
 
