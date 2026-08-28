@@ -348,9 +348,37 @@ UI happily with no provider at all — it just has no models to offer, so nothin
 agentic works until you add one.
 
 **Container is healthy but the domain 502s.**
-Coolify needs to know the port. Set **Ports Exposes** to `4096`
-(Dockerfile build pack) or make sure `SERVICE_FQDN_OPENCODE_4096` is present in
-the Compose environment.
+Traefik is dialling the wrong port. Coolify defaults **Ports Exposes** to `3000`
+and does not reliably pick up `EXPOSE 4096` from the Dockerfile, so set it to
+`4096` (Dockerfile build pack) or make sure `SERVICE_FQDN_OPENCODE_4096` is
+present in the Compose environment.
+
+Changing that field takes effect only on a **Redeploy** — a Restart reuses the
+existing container, and the Traefik labels are baked in at container creation.
+Confirm what Traefik was actually told, from the server:
+
+```bash
+docker inspect $(docker ps -aq --filter name=<app-uuid>) \
+  | grep -iE 'server\.port|Host\(|"Status":'
+```
+
+`loadbalancer.server.port` is the port Traefik dials; it has to match the port
+opencode logs on startup. If you need the site up before you can get that field
+to stick, setting `OPENCODE_PORT=3000` as an environment variable makes the app
+listen on Coolify's default instead — the entrypoint and the healthcheck both
+follow it.
+
+To narrow a 502 without leaving the container's own shell:
+
+```sh
+DOMAIN=<your domain>
+getent hosts coolify-proxy                                    # same network as the proxy?
+curl -s -o /dev/null -m 3 -w '%{http_code}\n' http://127.0.0.1:4096/site.webmanifest
+curl -s -o /dev/null -m 5 -w '%{http_code}\n' -H "Host: $DOMAIN" http://coolify-proxy/
+```
+
+A `200` on the second and a `502`/`302` on the third means the app is healthy and
+the problem is entirely in Traefik's routing.
 
 **Everything disappeared after a redeploy.**
 The `/data` volume isn't mounted. See step 5.
