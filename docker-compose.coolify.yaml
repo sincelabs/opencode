@@ -1,0 +1,52 @@
+# Coolify deployment for a self-hosted opencode server.
+#
+# Use this file with Coolify's "Docker Compose" build pack:
+#   Base Directory:          /
+#   Docker Compose Location: /docker-compose.coolify.yaml
+#
+# If you prefer the simpler "Dockerfile" build pack, ignore this file and point
+# Coolify at /deploy/coolify/Dockerfile instead -- see deploy/coolify/README.md.
+
+services:
+  opencode:
+    build:
+      context: .
+      dockerfile: deploy/coolify/Dockerfile
+      args:
+        # Baked into `opencode --version`. Bump it when you want the version
+        # string to reflect a new build.
+        OPENCODE_CHANNEL: selfhost
+        OPENCODE_VERSION: 0.0.0-selfhost
+    restart: unless-stopped
+    environment:
+      # Coolify replaces this with the domain you assign and routes it to 4096.
+      - SERVICE_FQDN_OPENCODE_4096
+      # REQUIRED. Without it the server is completely unauthenticated and
+      # anyone who finds the URL gets a root shell on this container.
+      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD:?set a password}
+      - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME:-opencode}
+      # Your model provider key(s). Any env name models.dev lists for the
+      # provider works -- ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY...
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      # Identity for commits the agent makes.
+      - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME:-opencode}
+      - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL:-opencode@localhost}
+      - GIT_COMMITTER_NAME=${GIT_AUTHOR_NAME:-opencode}
+      - GIT_COMMITTER_EMAIL=${GIT_AUTHOR_EMAIL:-opencode@localhost}
+    volumes:
+      # Auth credentials, session database, logs. Losing this loses your history.
+      - opencode-data:/data
+      # Where you clone the projects the agent works on.
+      - opencode-workspace:/workspace
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:4096/site.webmanifest"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  opencode-data:
+  opencode-workspace:
